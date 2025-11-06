@@ -4,6 +4,7 @@
 #include "InputParser.h"
 #include <iostream>
 #include <algorithm>
+#include <map>
 
 using namespace std;
 
@@ -23,12 +24,12 @@ void printUsage(const char* programName) {
 
 // Обрабатывает один запрос клиента
 bool processClientRequest(Client& client) {
-    // 1. Ввод описания графа
-    std::cout << "\nВведите описание графа (формат: A B, B C, C D, ...):" << std::endl;
-    std::cout << "или 'exit' для завершения работы: ";
+    // Ввод описания графа
+    cout << "\nВведите описание графа (формат: A B, B C, C D, ...):" << endl;
+    cout << "или 'exit' для завершения работы: ";
     
-    std::string graphInput;
-    std::getline(std::cin, graphInput);
+    string graphInput;
+    getline(cin, graphInput);
     
     // Проверяем команду выхода
     if (graphInput == "exit") {
@@ -36,57 +37,65 @@ bool processClientRequest(Client& client) {
     }
     
     // Парсим граф (получаем рёбра со строковыми именами)
-    std::vector<InputParser::Edge> stringEdges;
+    vector<InputParser::Edge> stringEdges;
     if (!InputParser::parseGraph(graphInput, stringEdges)) {
         Logger::error("Неверный формат ввода графа");
         return true; // Продолжаем работу
     }
     
-    // Преобразуем строковые имена в числовые индексы
-    std::vector<std::pair<int, int>> numericEdges;
-    std::map<std::string, int> vertexMap;
-    InputParser::convertToNumeric(stringEdges, numericEdges, vertexMap);
+    // ПРЕОБРАЗУЕМ СТРОКОВЫЕ ИМЕНА В ЧИСЛОВЫЕ ИНДЕКСЫ ВРУЧНУЮ
+    vector<vector<int>> edges;
+    map<string, int> vertexMap;
+    int nextIndex = 0;
     
-    // Формируем список рёбер в формате vector<vector<int>>
-    std::vector<std::vector<int>> edges;
-    for (const auto& edge : numericEdges) {
-        edges.push_back({edge.first, edge.second});
+    // Создаём отображение вершин и числовые рёбра
+    for (const auto& edge : stringEdges) {
+        // Добавляем вершины в отображение если их ещё нет
+        if (vertexMap.find(edge.vertex1) == vertexMap.end()) {
+            vertexMap[edge.vertex1] = nextIndex++;
+        }
+        if (vertexMap.find(edge.vertex2) == vertexMap.end()) {
+            vertexMap[edge.vertex2] = nextIndex++;
+        }
+        
+        // Создаём числовое ребро
+        edges.push_back({vertexMap[edge.vertex1], vertexMap[edge.vertex2]});
     }
     
     // Валидация размера графа
     int numVertices = vertexMap.size();
     int numEdges = edges.size();
     
-    std::string errorMessage;
+    string errorMessage;
     if (!Validator::isValidGraphSize(numVertices, numEdges, errorMessage)) {
         Logger::error(errorMessage);
         return true;
     }
     
     // 2. Ввод начальной и конечной вершин
-    std::cout << "Введите начальную и конечную вершины (формат: A B): ";
-    std::string verticesInput;
-    std::getline(std::cin, verticesInput);
+    cout << "Введите начальную и конечную вершины (формат: A B): ";
+    string verticesInput;
+    getline(cin, verticesInput);
     
-    std::string startVertexName, endVertexName;
+    string startVertexName, endVertexName;
     if (!InputParser::parseVertices(verticesInput, startVertexName, endVertexName)) {
         Logger::error("Неверный формат вершин");
         return true;
     }
     
-    // Проверяем, что вершины существуют в графе
-    if (!Validator::isValidVertex(startVertexName, vertexMap)) {
-        Logger::error("Вершины не найдены в графе");
+    // ПРОВЕРЯЕМ ВЕРШИНЫ ВРУЧНУЮ (вместо Validator::isValidVertex)
+    if (vertexMap.find(startVertexName) == vertexMap.end()) {
+        Logger::error("Начальная вершина не найдена в графе: " + startVertexName);
         return true;
     }
-    if (!Validator::isValidVertex(endVertexName, vertexMap)) {
-        Logger::error("Вершины не найдены в графе");
+    if (vertexMap.find(endVertexName) == vertexMap.end()) {
+        Logger::error("Конечная вершина не найдена в графе: " + endVertexName);
         return true;
     }
     
-    // Получаем числовые индексы вершин
-    int startVertex = InputParser::getVertexIndex(startVertexName, vertexMap);
-    int endVertex = InputParser::getVertexIndex(endVertexName, vertexMap);
+    // ПОЛУЧАЕМ ИНДЕКСЫ ВЕРШИН ВРУЧНУЮ (вместо InputParser::getVertexIndex)
+    int startVertex = vertexMap[startVertexName];
+    int endVertex = vertexMap[endVertexName];
     
     // 3. Формируем запрос
     ClientRequest request;
@@ -102,31 +111,31 @@ bool processClientRequest(Client& client) {
     
     // 5. Обрабатываем ответ
     if (response.error_code == SUCCESS) {
-        std::cout << "\nРезультат: " << response.path_length << endl;
+        cout << "\nРезультат: " << response.path.size() - 1 << endl;
         
         // Создаём обратный словарь (индекс -> имя)
-        std::map<int, std::string> indexToName;
+        map<int, string> indexToName;
         for (const auto& pair : vertexMap) {
             indexToName[pair.second] = pair.first;
         }
         
         // Выводим путь с именами вершин
-        std::cout << "Путь: ";
+        cout << "Путь: ";
         for (size_t i = 0; i < response.path.size(); i++) {
             int nodeIndex = response.path[i];
             
             // Находим имя вершины по индексу
             if (indexToName.find(nodeIndex) != indexToName.end()) {
-                std::cout << indexToName[nodeIndex];
+                cout << indexToName[nodeIndex];
             } else {
-                std::cout << nodeIndex; // На случай, если имя не найдено
+                cout << nodeIndex; // На случай, если имя не найдено
             }
             
             if (i < response.path.size() - 1) {
-                std::cout << " -> ";
+                cout << " -> ";
             }
         }
-        std::cout << endl;
+        cout << endl;
         
     } else if (response.error_code == NO_PATH) {
         Logger::error("Путь между вершинами не существует");
@@ -142,10 +151,6 @@ bool processClientRequest(Client& client) {
 // Главная функция клиента
 int main(int argc, char* argv[]) {
     // Проверяем количество аргументов
-    // argv[0] - имя программы
-    // argv[1] - IP-адрес
-    // argv[2] - протокол
-    // argv[3] - порт
     if (argc != 4) {
         Logger::error("Неверное количество аргументов");
         printUsage(argv[0]);

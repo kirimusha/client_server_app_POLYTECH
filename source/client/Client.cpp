@@ -175,7 +175,7 @@ bool Client::isConnected() const {
 }
 
 // Отправляет данные по TCP
-bool Client::sendTCP(const string& data) {
+bool Client::sendTCP(const vector<char>& data) {
     // Сначала отправляем размер данных
     uint32_t dataSize = data.size();
     uint32_t networkSize = htonl(dataSize);
@@ -185,7 +185,7 @@ bool Client::sendTCP(const string& data) {
     }
     
     // Затем отправляем сами данные
-    if (send(clientSocket, data.c_str(), data.size(), 0) < 0) {
+    if (send(clientSocket, data.data(), data.size(), 0) < 0) {
         return false;
     }
     
@@ -193,7 +193,7 @@ bool Client::sendTCP(const string& data) {
 }
 
 // Получает данные по TCP
-bool Client::receiveTCP(string& data) {
+bool Client::receiveTCP(vector<char>& data) {
     // Читаем размер данных
     uint32_t networkSize;
     int bytesRead = recv(clientSocket, &networkSize, sizeof(networkSize), 0);
@@ -218,20 +218,20 @@ bool Client::receiveTCP(string& data) {
         return false;
     }
     
-    data.assign(buffer, bytesRead);
+    data.assign(buffer, buffer + bytesRead);
     return true;
 }
 
 // Отправляет данные по UDP
-bool Client::sendUDP(const string& data) {
-    int bytesSent = sendto(clientSocket, data.c_str(), data.size(), 0,
+bool Client::sendUDP(const vector<char>& data) {
+    int bytesSent = sendto(clientSocket, data.data(), data.size(), 0,
                           (sockaddr*)&serverAddr, sizeof(serverAddr));
     return bytesSent > 0;
 }
 
 // Получает данные по UDP с повторными попытками
 // UDP не гарантирует доставку, поэтому делаем несколько попыток
-bool Client::receiveUDP(string& data) {
+bool Client::receiveUDP(vector<char>& data) {
     char buffer[BUFFER_SIZE];
     
     // Делаем до 3 попыток получить ответ
@@ -245,7 +245,7 @@ bool Client::receiveUDP(string& data) {
         
         if (bytesRead > 0) {
             // Успешно получили данные
-            data.assign(buffer, bytesRead);
+            data.assign(buffer, buffer + bytesRead);
             return true;
         }
         

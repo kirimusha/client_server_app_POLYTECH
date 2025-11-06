@@ -73,24 +73,24 @@ private:
     // Отправляет запрос по TCP
     // data Сериализованные данные запроса
     // true, если отправка успешна
-    bool sendTCP(const string& data);
+    bool sendTCP(const vector<char>& data);
 
     // Получает ответ по TCP
     // data Буфер для полученных данных
     // true, если получение успешно
-    bool receiveTCP(string& data);
+    bool receiveTCP(vector<char>& data);
 
     // Отправляет запрос по UDP
     // data Сериализованные данные запроса
     // true, если отправка успешна
-    bool sendUDP(const string& data);
+    bool sendUDP(const vector<char>& data);
 
     // Получает ответ по UDP с повторными попытками
     // data Буфер для полученных данных
     // true, если получение успешно
     
     // UDP не гарантирует доставку, поэтому делаем до 3 попыток
-    bool receiveUDP(string& data);
+    bool receiveUDP(vector<char>& data);
 };
 
 #endif
