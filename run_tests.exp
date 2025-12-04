@@ -1,0 +1,716 @@
+#!/usr/bin/expect -f
+# Автоматические тесты для клиент-серверного приложения
+# Требует установки: sudo apt-get install expect
+
+set timeout 10
+set test_passed 0
+set test_failed 0
+set total_tests 0
+
+# Цвета для вывода
+proc print_header {text} {
+    puts "\n=========================================="
+    puts "  $text"
+    puts "==========================================\n"
+}
+
+proc print_test {num total name} {
+    puts -nonewline "\[$num/$total\] $name... "
+    flush stdout
+}
+
+proc test_passed {msg} {
+    global test_passed
+    incr test_passed
+    puts "PASSED - $msg"
+}
+
+proc test_failed {msg} {
+    global test_failed
+    incr test_failed
+    puts "FAILED - $msg"
+}
+
+# Конфигурация путей к исполняемым файлам
+set SERVER_BIN "./build/server"
+set CLIENT_BIN "./build/client"
+
+# Проверка наличия исполняемых файлов
+proc check_binaries {} {
+    global SERVER_BIN CLIENT_BIN
+    
+    if {![file exists $SERVER_BIN]} {
+        puts "ОШИБКА: Не найден исполняемый файл сервера: $SERVER_BIN"
+        puts "Пожалуйста, скомпилируйте проект: make"
+        exit 1
+    }
+    
+    if {![file exists $CLIENT_BIN]} {
+        puts "ОШИБКА: Не найден исполняемый файл клиента: $CLIENT_BIN"
+        puts "Пожалуйста, скомпилируйте проект: make"
+        exit 1
+    }
+}
+
+# Функция для запуска сервера
+proc start_server {port protocol} {
+    global server_pid SERVER_BIN
+    spawn $SERVER_BIN $port $protocol
+    set server_pid $spawn_id
+    expect {
+        "Сервер запущен" { return 1 }
+        timeout { return 0 }
+    }
+}
+
+# Функция для остановки сервера
+proc stop_server {} {
+    global server_pid
+    if {[info exists server_pid]} {
+        close -i $server_pid
+        wait -i $server_pid
+        unset server_pid
+    }
+    sleep 1
+}
+
+# Создание тестовых файлов
+proc create_test_files {} {
+    # Граф с 5 вершинами (меньше минимума)
+    set fp [open "test_graph_5v.txt" w]
+    puts $fp "A B"
+    puts $fp "B C"
+    puts $fp "C D"
+    puts $fp "D E"
+    puts $fp "E A"
+    close $fp
+    
+    # Граф с 6 вершинами (минимум)
+    set fp [open "test_graph_6v.txt" w]
+    puts $fp "A B, B C, C D, D E, E F, F A"
+    close $fp
+    
+    # Граф с 13 вершинами (середина ОДЗ)
+    set fp [open "test_graph_13v.txt" w]
+    puts $fp "A B, B C, C D, D E, E F, F G"
+    puts $fp "G H, H I, I J, J K, K L, L M, M A"
+    close $fp
+    
+    # Граф с 20 вершинами (максимум)
+    set fp [open "test_graph_20v.txt" w]
+    puts $fp "A B, B C, C D, D E, E F, F G, G H, H I, I J, J K"
+    puts $fp "K L, L M, M N, N O, O P, P Q, Q R, R S, S T, T A"
+    close $fp
+    
+    # Граф с 21 вершиной (больше максимума)
+    set fp [open "test_graph_21v.txt" w]
+    puts $fp "A B, B C, C D, D E, E F, F G, G H, H I, I J, J K"
+    puts $fp "K L, L M, M N, N O, O P, P Q, Q R, R S, S T, T U, U A"
+    close $fp
+}
+
+# Удаление тестовых файлов
+proc cleanup_test_files {} {
+    file delete -force test_graph_5v.txt
+    file delete -force test_graph_6v.txt
+    file delete -force test_graph_13v.txt
+    file delete -force test_graph_20v.txt
+    file delete -force test_graph_21v.txt
+}
+
+#############################################################################################
+# ТЕСТ 1: Работа по протоколу TCP
+###########################################################################################
+proc test_tcp_basic {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "TCP: Базовая работа клиент-сервер"
+    
+    if {![start_server 8080 tcp]} {
+        test_failed "Не удалось запустить TCP сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8080
+    expect {
+        "Соединение с сервером установлено" {
+            send "A B, B C, C D, D E, E F, F A\r"
+            expect "Введите начальную и конечную вершины"
+            send "A D\r"
+            expect {
+                "Результат:" {
+                    test_passed "TCP работает корректно"
+                    send "exit\r"
+                    expect eof
+                    stop_server
+                    return
+                }
+                timeout {
+                    test_failed "Не получен результат"
+                }
+            }
+        }
+        timeout {
+            test_failed "Таймаут подключения"
+        }
+    }
+    stop_server
+}
+
+###############################################################################
+# ТЕСТ 2: TCP с несколькими клиентами
+####################################################################################
+proc test_tcp_multiple_clients {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "TCP: Обработка нескольких клиентов"
+    
+    if {![start_server 8081 tcp]} {
+        test_failed "Не удалось запустить TCP сервер"
+        return
+    }
+    
+    sleep 1
+    
+    # Запуск первого клиента
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8081
+    set client1 $spawn_id
+    expect -i $client1 "Соединение с сервером установлено"
+    
+    # Запуск второго клиента
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8081
+    set client2 $spawn_id
+    expect -i $client2 "Соединение с сервером установлено"
+    
+    # Отправка запроса от первого клиента
+    send -i $client1 "A B, B C, C A\r"
+    expect -i $client1 "Введите начальную и конечную вершины"
+    send -i $client1 "A C\r"
+    
+    # Отправка запроса от второго клиента
+    send -i $client2 "X Y, Y Z, Z X\r"
+    expect -i $client2 "Введите начальную и конечную вершины"
+    send -i $client2 "X Z\r"
+    
+    # Проверка результатов
+    set success 0
+    expect {
+        -i $client1 "Результат:" { incr success }
+        timeout {}
+    }
+    expect {
+        -i $client2 "Результат:" { incr success }
+        timeout {}
+    }
+    
+    if {$success == 2} {
+        test_passed "Оба клиента получили ответы"
+    } else {
+        test_failed "Не все клиенты получили ответы"
+    }
+    
+    send -i $client1 "exit\r"
+    send -i $client2 "exit\r"
+    close -i $client1
+    close -i $client2
+    stop_server
+}
+
+####################################################################################
+# ТЕСТ 3: Работа по протоколу UDP
+##########################################################################################
+proc test_udp_basic {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "UDP: Базовая работа клиент-сервер"
+    
+    if {![start_server 8082 udp]} {
+        test_failed "Не удалось запустить UDP сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 udp 8082
+    expect {
+        "Соединение с сервером установлено" {
+            send "A B, B C, C D, D E, E F, F A\r"
+            expect "Введите начальную и конечную вершины"
+            send "A E\r"
+            expect {
+                "Результат:" {
+                    test_passed "UDP работает корректно"
+                    send "exit\r"
+                    expect eof
+                    stop_server
+                    return
+                }
+                timeout {
+                    test_failed "Не получен результат"
+                }
+            }
+        }
+        timeout {
+            test_failed "Таймаут подключения"
+        }
+    }
+    stop_server
+}
+
+#######################################################################################
+# ТЕСТ 4: UDP при недоступности сервера
+#################################################################################
+proc test_udp_server_unavailable {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "UDP: Работа при недоступности сервера"
+    
+    # Сервер НЕ запускается!
+    spawn $CLIENT_BIN 127.0.0.1 udp 9999
+    expect "Соединение с сервером установлено"
+    
+    send "A B, B C, C A\r"
+    expect "Введите начальную и конечную вершины"
+    send "A C\r"
+    
+    expect {
+        "Потеряна связь с сервером" {
+            test_passed "Клиент корректно обработал недоступность сервера"
+            send "exit\r"
+            expect eof
+            return
+        }
+        "Не удалось получить ответ от сервера" {
+            test_passed "Клиент корректно обработал отсутствие ответа"
+            send "exit\r"
+            expect eof
+            return
+        }
+        timeout {
+            test_failed "Клиент не обнаружил недоступность сервера"
+        }
+    }
+}
+
+#####################################################################################
+# ТЕСТ 5: UDP с повторными попытками
+#######################################################################################
+proc test_udp_retransmission {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "UDP: Механизм повторной отправки"
+    
+    if {![start_server 8083 udp]} {
+        test_failed "Не удалось запустить UDP сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 udp 8083
+    expect "Соединение с сервером установлено"
+    
+    send "A B, B C, C A\r"
+    expect "Введите начальную и конечную вершины"
+    send "A B\r"
+    
+    # Ожидаем логи о попытках отправки или успешный результат
+    expect {
+        "Пакет подтверждён сервером" {
+            test_passed "Пакет успешно подтверждён"
+        }
+        "Результат:" {
+            test_passed "Получен корректный результат"
+        }
+        timeout {
+            test_failed "Не получено подтверждение"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+########################################################################################
+# ТЕСТ 6: Ввод с клавиатуры
+#########################################################################################
+proc test_keyboard_input {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "Ввод: С клавиатуры"
+    
+    if {![start_server 8084 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8084
+    expect "Соединение с сервером установлено"
+    
+    # Ввод графа с клавиатуры
+    expect "Введите описание графа"
+    send "A B, B C, C D, D E, E F, F A, A C, B D\r"
+    
+    expect "Введите начальную и конечную вершины"
+    send "A D\r"
+    
+    expect {
+        "Результат:" {
+            test_passed "Ввод с клавиатуры работает"
+            send "exit\r"
+            expect eof
+        }
+        timeout {
+            test_failed "Не получен результат"
+        }
+    }
+    
+    stop_server
+}
+
+########################################################################################
+# ТЕСТ 7: Ввод из файла
+###########################################################################################
+proc test_file_input {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "Ввод: Из файла"
+    
+    if {![start_server 8085 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8085
+    expect "Соединение с сервером установлено"
+    
+    expect "Введите описание графа"
+    send "test_graph_6v.txt\r"
+    
+    expect {
+        "Граф успешно загружен из файла" {
+            expect "Введите начальную и конечную вершины"
+            send "A D\r"
+            expect {
+                "Результат:" {
+                    test_passed "Ввод из файла работает"
+                }
+                timeout {
+                    test_failed "Не получен результат"
+                }
+            }
+        }
+        timeout {
+            test_failed "Файл не загружен"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+#############################################################################################
+# ТЕСТ 8: Граф 5 вершин (ниже минимума)
+############################################################################################
+proc test_graph_below_min {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "ОДЗ: 5 вершин (ниже минимума)"
+    
+    if {![start_server 8086 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8086
+    expect "Соединение с сервером установлено"
+    
+    expect "Введите описание графа"
+    send "test_graph_5v.txt\r"
+    
+    expect "Граф успешно загружен из файла"
+    expect "Введите начальную и конечную вершины"
+    send "A C\r"
+    
+    expect {
+        "Граф должен содержать не менее 6 вершин" {
+            test_passed "Корректная валидация минимума"
+        }
+        "Неверный запрос" {
+            test_passed "Сервер отклонил граф ниже минимума"
+        }
+        "Результат:" {
+            test_failed "Сервер принял граф ниже минимума"
+        }
+        timeout {
+            test_failed "Таймаут"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+#########################################################################################
+# ТЕСТ 9: Граф 6 вершин (минимум)
+####################################################################################
+proc test_graph_at_min {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "ОДЗ: 6 вершин (минимум)"
+    
+    if {![start_server 8087 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8087
+    expect "Соединение с сервером установлено"
+    
+    expect "Введите описание графа"
+    send "test_graph_6v.txt\r"
+    
+    expect "Граф успешно загружен из файла"
+    expect "Введите начальную и конечную вершины"
+    send "A D\r"
+    
+    expect {
+        "Результат:" {
+            test_passed "Граф с минимальным количеством вершин работает"
+        }
+        timeout {
+            test_failed "Не получен результат"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+#########################################################################################
+# ТЕСТ 10: Граф 13 вершин (середина ОДЗ)
+################################################################################################
+proc test_graph_middle {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "ОДЗ: 13 вершин (середина)"
+    
+    if {![start_server 8088 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8088
+    expect "Соединение с сервером установлено"
+    
+    expect "Введите описание графа"
+    send "test_graph_13v.txt\r"
+    
+    expect "Граф успешно загружен из файла"
+    expect "Введите начальную и конечную вершины"
+    send "A G\r"
+    
+    expect {
+        "Результат:" {
+            test_passed "Граф середины ОДЗ работает"
+        }
+        timeout {
+            test_failed "Не получен результат"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+#################################################################################################
+# ТЕСТ 11: Граф 20 вершин (максимум)
+#################################################################################################
+proc test_graph_at_max {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "ОДЗ: 20 вершин (максимум)"
+    
+    if {![start_server 8089 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8089
+    expect "Соединение с сервером установлено"
+    
+    expect "Введите описание графа"
+    send "test_graph_20v.txt\r"
+    
+    expect "Граф успешно загружен из файла"
+    expect "Введите начальную и конечную вершины"
+    send "A J\r"
+    
+    expect {
+        "Результат:" {
+            test_passed "Граф с максимальным количеством вершин работает"
+        }
+        timeout {
+            test_failed "Не получен результат"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+#############################################################################################
+# ТЕСТ 12: Граф 21 вершина (выше максимума)
+##################################################################################################
+proc test_graph_above_max {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "ОДЗ: 21 вершина (выше максимума)"
+    
+    if {![start_server 8090 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8090
+    expect "Соединение с сервером установлено"
+    
+    expect "Введите описание графа"
+    send "test_graph_21v.txt\r"
+    
+    expect "Граф успешно загружен из файла"
+    expect "Введите начальную и конечную вершины"
+    send "A K\r"
+    
+    expect {
+        "Граф должен содержать не более 20 вершин" {
+            test_passed "Корректная валидация максимума"
+        }
+        "Неверный запрос" {
+            test_passed "Сервер отклонил граф выше максимума"
+        }
+        "Результат:" {
+            test_failed "Сервер принял граф выше максимума"
+        }
+        timeout {
+            test_failed "Таймаут"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+###############################################################################################
+# ТЕСТ 13: Несуществующий путь
+#####################################################################################################
+proc test_no_path {} {
+    global total_tests CLIENT_BIN
+    incr total_tests
+    print_test $total_tests 15 "Алгоритм: Несуществующий путь"
+    
+    if {![start_server 8091 tcp]} {
+        test_failed "Не удалось запустить сервер"
+        return
+    }
+    
+    sleep 1
+    
+    spawn $CLIENT_BIN 127.0.0.1 tcp 8091
+    expect "Соединение с сервером установлено"
+    
+    # Два несвязных компонента
+    expect "Введите описание графа"
+    send "A B, B C, X Y, Y Z\r"
+    
+    expect "Введите начальную и конечную вершины"
+    send "A X\r"
+    
+    expect {
+        "Путь между вершинами не существует" {
+            test_passed "Корректно обработан несуществующий путь"
+        }
+        "Результат:" {
+            test_failed "Найден путь в несвязанном графе"
+        }
+        timeout {
+            test_failed "Таймаут"
+        }
+    }
+    
+    send "exit\r"
+    expect eof
+    stop_server
+}
+
+###############################################################################################################
+# ГЛАВНАЯ ФУНКЦИЯ
+#################################################################################################
+
+print_header "АВТОМАТИЧЕСКОЕ ТЕСТИРОВАНИЕ"
+
+# Проверка наличия исполняемых файлов
+check_binaries
+puts "Исполняемые файлы найдены\n"
+
+# Создание тестовых файлов
+puts "Создание тестовых файлов..."
+create_test_files
+puts "Тестовые файлы созданы\n"
+
+# Запуск всех тестов
+test_tcp_basic
+test_tcp_multiple_clients
+test_udp_basic
+test_udp_server_unavailable
+test_udp_retransmission
+test_keyboard_input
+test_file_input
+test_graph_below_min
+test_graph_at_min
+test_graph_middle
+test_graph_at_max
+test_graph_above_max
+test_no_path
+
+# Очистка
+puts "\nОчистка тестовых файлов..."
+cleanup_test_files
+puts "Очистка завершена"
+
+# Итоговый отчёт
+print_header "РЕЗУЛЬТАТЫ ТЕСТИРОВАНИЯ"
+puts "Всего тестов:  $total_tests"
+puts "Успешно:       $test_passed "
+puts "Неудачно:      $test_failed "
+
+if {$test_failed == 0} {
+    puts "\nВСЕ ТЕСТЫ ПРОЙДЕНЫ УСПЕШНО!"
+    exit 0
+} else {
+    puts "\nЕСТЬ НЕУДАЧНЫЕ ТЕСТЫ"
+    exit 1
+}
