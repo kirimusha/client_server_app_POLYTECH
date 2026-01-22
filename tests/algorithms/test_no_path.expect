@@ -1,0 +1,52 @@
+#!/usr/bin/expect -f
+set timeout 5
+set port 18704
+
+send "\r"
+send_user "\rТест: Несуществующий путь\r"
+send "\r"
+
+spawn ../bin/server $port tcp
+set server_pid [exp_pid]
+
+expect {
+    "Сервер запущен" {}
+    timeout {}
+}
+
+sleep 1
+
+spawn ../bin/client 127.0.0.1 tcp $port
+
+expect "описание графа"
+send "A B, B C, C D, D E, E F, G H, H I, I J, J K, K L\r"
+
+expect "вершины"
+send "A G\r"
+
+expect {
+    "не существует" {
+        set result 0
+    }
+    "не найден" {
+        set result 0
+    }
+    "недостижим" {
+        set result 0
+    }
+    "Ошибка" {
+        set result 0
+    }
+    "Результат:" {
+        set result 1
+    }
+    timeout {
+        set result 1
+    }
+}
+
+send "exit\r"
+exec kill -TERM $server_pid
+sleep 0.5
+
+exit $result

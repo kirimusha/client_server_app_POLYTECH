@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+set timeout 8
+set port 18081
+
+send "\r"
+send_user "\rTCP: Базовая работа\r"
+send "\r"
+
+spawn ../bin/server $port tcp
+expect {
+    "Сервер запущен" {}
+    timeout { exit 1 }
+}
+
+sleep 2
+
+spawn ../bin/client 127.0.0.1 tcp $port
+expect {
+    "Соединение" {}
+    "установлено" {}
+    timeout { exit 1 }
+}
+
+expect "описание графа"
+send "A B, B C, C D, D E, E F, F A\r"
+
+expect "вершины"
+send "A D\r"
+
+expect {
+    "Результат" { exit 0 }
+    timeout { exit 1 }
+}
+
+send "exit\r"
+sleep 1
+
+exec kill -TERM $server_spawn_id
+exit 0

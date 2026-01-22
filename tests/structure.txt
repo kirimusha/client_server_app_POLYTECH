@@ -1,0 +1,29 @@
+tests/
+├── run_tests.sh              # Главный скрипт для запуска
+├── config.sh                 # Конфигурация и переменные
+├── utils.sh                  # Общие утилиты
+├── setup.sh                  # Настройка тестовой среды
+├── cleanup.sh                # Очистка тестовой среды
+├── test_helpers.expect       # Вспомогательные функции Expect
+├── report.sh                 # Генерация отчетов
+│
+├── protocols/                # Тесты протоколов
+│   ├── test_tcp_basic.expect
+│   ├── test_tcp_multiple.expect
+│   ├── test_udp_basic.expect
+│   ├── test_udp_unavailable.expect
+│   └── test_udp_retransmission.expect
+│
+├── input_methods/            # Тесты методов ввода
+│   ├── test_keyboard_input.expect
+│   └── test_file_input.expect
+│
+├── validation/               # Тесты валидации и ОДЗ
+│   ├── test_graph_below_min.expect
+│   ├── test_graph_at_min.expect
+│   ├── test_graph_middle.expect
+│   ├── test_graph_at_max.expect
+│   └── test_graph_above_max.expect
+│
+└── algorithms/               # Тесты алгоритмов
+    └── test_no_path.expect

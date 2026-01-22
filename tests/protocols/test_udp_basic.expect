@@ -1,0 +1,36 @@
+#!/usr/bin/expect -f
+set timeout 5
+set port 18083
+
+send "\r"
+send_user "\rUDP: Базовая работа\r"
+send "\r"
+
+spawn ../bin/server $port udp
+set server_pid [exp_pid]
+
+expect {
+    "Сервер запущен" {}
+    timeout {}
+}
+
+sleep 1
+
+spawn ../bin/client 127.0.0.1 udp $port
+
+expect "описание графа"
+send "A B, B C, C D, D E, E F, F G, G H, H A\r"
+
+expect "вершины"
+send "A E\r"
+
+expect {
+    "Результат:" {}
+    timeout {}
+}
+
+send "exit\r"
+sleep 0.5
+
+exec kill -TERM $server_pid
+exit 0

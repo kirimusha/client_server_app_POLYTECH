@@ -1,0 +1,29 @@
+#!/usr/bin/expect -f
+set timeout 5
+set port 18530
+
+send "\r"
+send_user "\rОДЗ: 5 вершин (ниже минимума)\r"
+send "\r"
+
+spawn ../bin/server $port tcp
+set server [exp_pid]
+sleep 1
+
+spawn ../bin/client 127.0.0.1 tcp $port
+
+expect "описание графа"
+send "A B, B C, C D, D E, E A\r"
+
+expect {
+    "не менее 6" { exit 0 }
+    "минимум 6" { exit 0 }
+    "меньше.*6" { exit 0 }
+    "вершины" { exit 1 }
+    timeout { exit 0 }
+}
+
+send "exit\r"
+sleep 0.3
+exec kill -TERM $server
+exit 0

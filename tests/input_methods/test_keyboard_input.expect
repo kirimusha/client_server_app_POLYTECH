@@ -1,0 +1,27 @@
+#!/usr/bin/expect -f
+set timeout 5
+set port 18400
+
+send "\r"
+send_user "\rВвод с клавиатуры\r"
+send "\r"
+
+spawn ../bin/server $port tcp
+set server [exp_pid]
+
+sleep 2
+
+spawn ../bin/client 127.0.0.1 tcp $port
+
+send "A B, B C, C D, D E, E F, F A\r"
+sleep 1
+send "A D\r"
+sleep 2
+
+send "exit\r"
+sleep 1
+
+exec kill -TERM $server
+sleep 1
+
+exit 0

@@ -1,0 +1,54 @@
+#!/usr/bin/expect -f
+set timeout 5
+set port 18085
+
+send "\r"
+send_user "\rTCP: Несколько клиентов\r"
+send "\r"
+
+spawn ../bin/server $port tcp
+set server_pid [exp_pid]
+
+expect {
+    "Сервер запущен" {}
+    timeout {}
+}
+
+sleep 1
+
+spawn ../bin/client 127.0.0.1 tcp $port
+set client1 $spawn_id
+
+expect -i $client1 "описание графа"
+send -i $client1 "A B, B C, C D, D E, E F, F A\r"
+
+expect -i $client1 "вершины"
+send -i $client1 "A D\r"
+
+expect -i $client1 {
+    "Результат:" {}
+    timeout {}
+}
+
+sleep 0.3
+
+spawn ../bin/client 127.0.0.1 tcp $port
+set client2 $spawn_id
+
+expect -i $client2 "описание графа"
+send -i $client2 "X Y, Y Z, Z W, W V, V U, U X\r"
+
+expect -i $client2 "вершины"
+send -i $client2 "X W\r"
+
+expect -i $client2 {
+    "Результат:" {}
+    timeout {}
+}
+
+send -i $client1 "exit\r"
+send -i $client2 "exit\r"
+sleep 0.2
+
+exec kill -TERM $server_pid
+exit 0

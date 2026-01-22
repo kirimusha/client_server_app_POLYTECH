@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+set timeout 5
+set port 18090
+
+send "\r"
+send_user "\rUDP: Повторная отправка\r"
+send "\r"
+
+spawn ../bin/server $port udp
+set server_pid [exp_pid]
+
+expect {
+    "Сервер запущен" {}
+    timeout {}
+}
+
+sleep 1
+
+spawn ../bin/client 127.0.0.1 udp $port
+set client_spawn_id $spawn_id
+
+expect -i $client_spawn_id "описание графа"
+send -i $client_spawn_id "A B, B C, C D, D E, E F, F A\r"
+
+expect -i $client_spawn_id "вершины"
+send -i $client_spawn_id "A D\r"
+
+expect -i $client_spawn_id {
+    "Результат:" {}
+    "повторная отправка" {}
+    "Пакет подтверждён" {}
+    timeout {}
+}
+
+send -i $client_spawn_id "exit\r"
+sleep 0.5
+
+exec kill -TERM $server_pid
+exit 0
