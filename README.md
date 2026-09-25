@@ -94,7 +94,7 @@ A G
 ```bash
 Ctrl + C
 ```
-
+```mermaid
 flowchart TD
 
 subgraph group_client["Client input and requests"]
@@ -167,4 +167,4 @@ class node_client_main,node_client,node_user toneBlue
 class node_udp_protocol,node_network toneAmber
 class node_server_main,node_server,node_graph,node_dijkstra toneMint
 class node_parser,node_file_reader,node_validator,node_protocol,node_logger toneRose
-
+```
